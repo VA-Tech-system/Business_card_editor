@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高階名片美化排版編輯器</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+TC:wght@300;400;500;700;900&family=Noto+Serif+TC:wght@400;600;700;900&family=Roboto+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- html2canvas for High Resolution PNG Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- QRCode.js for Realtime QR Code Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Noto Sans TC', 'Montserrat', sans-serif;
+            background-color: #0b1120;
+            color: #f8fafc;
+        }
+
+        /* Standard 90mm x 54mm business card display stage (ratio 5:3) */
+        .card-stage {
+            width: 540px;
+            height: 324px;
+            position: relative;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.12);
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+            border-radius: 6px;
+            overflow: hidden;
+            background-color: #ffffff;
+            background-size: cover;
+            background-position: center;
+            box-sizing: border-box;
+        }
+
+        /* Editable text highlight style */
+        [contenteditable="true"]:hover {
+            outline: 1.5px dashed #3b82f6;
+            background-color: rgba(59, 130, 246, 0.08);
+            border-radius: 2px;
+            cursor: text;
+        }
+
+        [contenteditable="true"]:focus {
+            outline: 2px solid #2563eb;
+            background-color: rgba(59, 130, 246, 0.15);
+            border-radius: 2px;
+        }
+
+        /* Keep aspect ratio preserved for image logo */
+        .logo-img-wrapper img {
+            max-height: 100%;
+            width: auto;
+            object-fit: contain;
+            display: block;
+            pointer-events: none;
+        }
+
+        /* Interactive draggable and resizable block styles */
+        .draggable-block {
+            position: relative;
+            cursor: move;
+            user-select: none;
+            touch-action: none;
+            border: 1px transparent dashed;
+            transition: border-color 0.2s ease;
+        }
+        
+        .draggable-block:hover, .draggable-block.active-block {
+            border-color: rgba(59, 130, 246, 0.6) !important;
+            border-radius: 4px;
+        }
+
+        .draggable-block [contenteditable="true"] {
+            cursor: text;
+            user-select: text;
+        }
+
+        /* Resize Corner Handle */
+        .resize-handle {
+            touch-action: none;
+            cursor: nwse-resize;
+            user-select: none;
+        }
+
+        /* Standard 90mm x 54mm physical print output styles */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #print-card-wrapper, #print-card-wrapper * {
+                visibility: visible;
+            }
+            #print-card-wrapper {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 90mm;
+                height: 54mm;
+                margin: 0;
+                padding: 0;
+                box-shadow: none !important;
+                border-radius: 0 !important;
+                transform: none !important;
+            }
+            .drag-handle, .resize-handle {
+                display: none !important;
+            }
+            @page {
+                size: 90mm 54mm;
+                margin: 0;
+            }
+        }
+
+        /* Custom scrollbar styling for control sidepanel */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+
+    <header class="bg-slate-900 border-b border-slate-800 px-6 py-3 flex flex-wrap justify-between items-center gap-4 sticky top-0 z-50 shadow-lg">
+        <div class="flex items-center space-x-3">
+            <div class="bg-gradient-to-tr from-blue-600 to-indigo-500 p-2 rounded-xl text-white shadow-lg shadow-blue-500/20">
+                <i data-lucide="credit-card" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="text-base font-bold text-white flex items-center gap-2">
+                    名片美化排版編輯器 <span class="text-[11px] bg-blue-500/20 text-blue-400 font-mono px-2 py-0.5 rounded border border-blue-500/30">Studio V1.0 Pro</span>
+                </h1>
+                <p class="text-xs text-slate-400">完整支援 LOGO 與姓名區塊拖拉移動與右下角長寬比等比例縮放、全方位編輯控制面板</p>
+            </div>
+        </div>
+
+        <!-- Language Selector -->
+        <div class="flex items-center space-x-1.5 bg-slate-800/90 p-1.5 rounded-xl border border-slate-700">
+            <span class="text-xs text-slate-400 px-2 font-medium flex items-center gap-1">
+                <i data-lucide="globe" class="w-3.5 h-3.5 text-blue-400"></i> 語系切換:
+            </span>
+            <button onclick="switchLanguage('zh')" id="lang-btn-zh" class="lang-btn px-3 py-1 text-xs font-semibold rounded-lg bg-blue-600 text-white shadow transition">繁體中文</button>
+            <button onclick="switchLanguage('en')" id="lang-btn-en" class="lang-btn px-3 py-1 text-xs font-semibold rounded-lg text-slate-300 hover:bg-slate-700 transition">English</button>
+            <button onclick="switchLanguage('ja')" id="lang-btn-ja" class="lang-btn px-3 py-1 text-xs font-semibold rounded-lg text-slate-300 hover:bg-slate-700 transition">日本語</button>
+        </div>
+
+        <!-- Quick Export Action Buttons -->
+        <div class="flex items-center space-x-2.5">
+            <button onclick="exportPNG()" class="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-md shadow-blue-600/30 active:scale-95">
+                <i data-lucide="download" class="w-4 h-4"></i> 下載高畫質 PNG
+            </button>
+            <button onclick="window.print()" class="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition shadow-md shadow-emerald-600/30 active:scale-95">
+                <i data-lucide="printer" class="w-4 h-4"></i> 列印 / 存為 PDF
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        <!-- Left Column: Control Panel -->
+        <div class="lg:col-span-5 bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-5 max-h-[85vh] overflow-y-auto shadow-xl">
+            
+            <!-- Theme Selection & Custom Background -->
+            <div>
+                <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                    <i data-lucide="palette" class="w-4 h-4 text-blue-400"></i> 1. 設計主題風格與背景選擇
+                </h3>
+                <div class="grid grid-cols-2 gap-2 mb-3">
+                    <button onclick="applyTheme('modern-blue')" id="theme-btn-modern-blue" class="theme-btn bg-slate-800 border-2 border-blue-500 text-white p-2.5 rounded-xl text-xs font-semibold text-left transition flex justify-between items-center">
+                        <span>現代科技藍 <span class="block text-[10px] text-blue-400 font-normal">（推薦首選）</span></span>
+                        <div class="w-3.5 h-3.5 rounded-full bg-blue-600 border border-blue-300"></div>
+                    </button>
+                    <button onclick="applyTheme('classic-original')" id="theme-btn-classic-original" class="theme-btn bg-slate-800 border-2 border-transparent hover:border-slate-700 text-slate-300 p-2.5 rounded-xl text-xs font-semibold text-left transition flex justify-between items-center">
+                        <span>經典原貌重現 <span class="block text-[10px] text-slate-400 font-normal">忠實還原</span></span>
+                        <div class="w-3.5 h-3.5 rounded-full bg-slate-200 border border-slate-400"></div>
+                    </button>
+                    <button onclick="applyTheme('white-gold')" id="theme-btn-white-gold" class="theme-btn bg-slate-800 border-2 border-transparent hover:border-slate-700 text-slate-300 p-2.5 rounded-xl text-xs font-semibold text-left transition flex justify-between items-center">
+                        <span>簡約白金 <span class="block text-[10px] text-slate-400 font-normal">典雅高雅</span></span>
+                        <div class="w-3.5 h-3.5 rounded-full bg-amber-400"></div>
+                    </button>
+                    <button onclick="applyTheme('dark-tech')" id="theme-btn-dark-tech" class="theme-btn bg-slate-800 border-2 border-transparent hover:border-slate-700 text-slate-300 p-2.5 rounded-xl text-xs font-semibold text-left transition flex justify-between items-center">
+                        <span>高階深色 <span class="block text-[10px] text-slate-400 font-normal">極致尊榮</span></span>
+                        <div class="w-3.5 h-3.5 rounded-full bg-slate-950 border border-slate-600"></div>
+                    </button>
+                </div>
+
+                <!-- Custom Background Upload & Solid Color Control -->
+                <div class="bg-slate-800/80 p-3 rounded-xl border border-slate-700/80 space-y-3">
+                    <div class="flex items-center justify-between border-b border-slate-700/60 pb-2">
+                        <label class="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                            <i data-lucide="image" class="w-3.5 h-3.5 text-blue-400"></i> 自訂名片背景 (圖檔 / 單色選擇)
+                        </label>
+                        <button onclick="removeBgImage()" class="px-2 py-0.5 text-[11px] bg-slate-700 hover:bg-slate-600 text-slate-300 rounded transition flex items-center gap-1">
+                            <i data-lucide="rotate-ccw" class="w-3 h-3"></i> 重置背景
+                        </button>
+                    </div>
+
+                    <!-- Solid Color Selection & Fast Swatches -->
+                    <div class="space-y-1.5">
+                        <div class="flex justify-between items-center text-[11px] text-slate-300">
+                            <span>選擇名片單色底色</span>
+                            <span class="text-[10px] text-slate-400">可自由調色或點擊快選</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <input type="color" id="bg-color-picker" value="#ffffff" onchange="handleBgColorChange(this.value)" class="w-9 h-8 bg-slate-900 border border-slate-700 rounded cursor-pointer p-0.5 shrink-0" title="自訂色彩">
+                            
+                            <!-- Quick Preset Color Swatches -->
+                            <div class="flex items-center gap-1.5 flex-1 overflow-x-auto py-0.5">
+                                <button onclick="handleBgColorChange('#ffffff')" class="w-6 h-6 rounded-md bg-white border border-slate-500 hover:scale-110 transition shadow-sm shrink-0" title="純白"></button>
+                                <button onclick="handleBgColorChange('#f8fafc')" class="w-6 h-6 rounded-md bg-slate-50 border border-slate-400 hover:scale-110 transition shadow-sm shrink-0" title="極淺灰"></button>
+                                <button onclick="handleBgColorChange('#fdfbf7')" class="w-6 h-6 rounded-md bg-[#fdfbf7] border border-amber-200 hover:scale-110 transition shadow-sm shrink-0" title="經典象牙白"></button>
+                                <button onclick="handleBgColorChange('#1e293b')" class="w-6 h-6 rounded-md bg-slate-800 border border-slate-600 hover:scale-110 transition shadow-sm shrink-0" title="深石藍"></button>
+                                <button onclick="handleBgColorChange('#0f172a')" class="w-6 h-6 rounded-md bg-slate-900 border border-slate-700 hover:scale-110 transition shadow-sm shrink-0" title="暗黑尊榮"></button>
+                                <button onclick="handleBgColorChange('#1e3a8a')" class="w-6 h-6 rounded-md bg-blue-900 border border-blue-700 hover:scale-110 transition shadow-sm shrink-0" title="科技深藍"></button>
+                                <button onclick="handleBgColorChange('#064e3b')" class="w-6 h-6 rounded-md bg-emerald-900 border border-emerald-600 hover:scale-110 transition shadow-sm shrink-0" title="深翡翠綠"></button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Custom Background Image Upload -->
+                    <div class="pt-2 border-t border-slate-700/60">
+                        <label class="block text-xs text-slate-300 mb-1 font-medium">上傳名片背景圖 (JPG / PNG / WebP)</label>
+                        <input type="file" id="bg-file-input" accept="image/*" onchange="handleBgUpload(event)" class="text-xs text-slate-400 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer w-full">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logo Free Dragging, Position & Scale Controls -->
+            <div class="pt-3.5 border-t border-slate-800">
+                <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                    <i data-lucide="move" class="w-4 h-4 text-blue-400"></i> 2. LOGO 拖拉移動與等比例縮放調校
+                </h3>
+                
+                <!-- Position X/Y Sliders -->
+                <div class="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2.5 mb-3">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                            <i data-lucide="arrow-up-right" class="w-3.5 h-3.5 text-blue-400"></i> Logo 位置與大小設定 (畫布直覺拖拉同步)
+                        </label>
+                        <button onclick="resetLogoPosition()" class="px-2 py-0.5 text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition flex items-center gap-1">
+                            <i data-lucide="rotate-ccw" class="w-3 h-3"></i> 重置重置
+                        </button>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                                <span>水平偏移 (X)</span>
+                                <span id="logo-pos-x-val" class="text-blue-400 font-mono">0px</span>
+                            </div>
+                            <input type="range" id="logo-pos-x-range" min="-250" max="400" value="0" oninput="handleLogoPosSliderChange()" class="w-full accent-blue-500 bg-slate-800 rounded">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                                <span>垂直偏移 (Y)</span>
+                                <span id="logo-pos-y-val" class="text-blue-400 font-mono">0px</span>
+                            </div>
+                            <input type="range" id="logo-pos-y-range" min="-100" max="220" value="0" oninput="handleLogoPosSliderChange()" class="w-full accent-blue-500 bg-slate-800 rounded">
+                        </div>
+                    </div>
+
+                    <!-- Scale Slider -->
+                    <div>
+                        <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                            <span>Logo 縮放比例 (長寬比恆定)</span>
+                            <span id="logo-scale-val" class="text-blue-400 font-mono">100%</span>
+                        </div>
+                        <input type="range" id="logo-scale" min="30" max="250" value="100" oninput="updateLogoStyle()" class="w-full accent-blue-500 bg-slate-800 rounded">
+                    </div>
+
+                    <p class="text-[10px] text-blue-400/90 leading-tight">✨ 畫布操作：按住 Logo 中央拖拉可移動位置；拖拉 Logo 右下角控制點可等比例縮放！</p>
+                </div>
+
+                <!-- Scale Sliders & Logo Image Input -->
+                <div class="space-y-2.5">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">更換/移除 Logo 圖檔</label>
+                        <input type="file" id="logo-file-input" accept="image/*" onchange="handleLogoUpload(event)" class="text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer w-full mb-1">
+                        <div class="grid grid-cols-2 gap-1.5 mt-1.5">
+                            <button onclick="removeLogoBackground()" class="py-1 px-2 text-[11px] bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition font-semibold flex items-center justify-center gap-1 shadow">
+                                <i data-lucide="wand-2" class="w-3.5 h-3.5"></i> 一鍵去除白底/棋盤格
+                            </button>
+                            <button onclick="resetDefaultLogo()" class="py-1 px-2 text-[11px] bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition font-semibold flex items-center justify-center gap-1">
+                                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> 重置預設 Logo
+                            </button>
+                        </div>
+                        <button onclick="clearLogoImage()" class="w-full py-1 text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition mt-1.5">空白 / 清除標誌</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Typography & Color Settings -->
+            <div class="pt-3.5 border-t border-slate-800 space-y-3">
+                <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                    <i data-lucide="type" class="w-4 h-4 text-blue-400"></i> 3. 排版字體、字級大小與文字顏色調校
+                </h3>
+
+                <!-- Font Family Selection -->
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">字體選擇 Font Style</label>
+                    <select id="font-family" onchange="updateTypography()" class="w-full bg-slate-800 border border-slate-700 text-xs rounded-lg p-2 text-white focus:outline-none focus:border-blue-500">
+                        <option value="'Noto Sans TC', sans-serif">現代簡約無襯線黑體 (Noto Sans)</option>
+                        <option value="'Noto Sans JP', 'Noto Sans TC', sans-serif">日系精緻黑體 (Noto Sans JP)</option>
+                        <option value="'Noto Serif TC', serif">古典標楷/襯線明體 (Noto Serif)</option>
+                        <option value="'Montserrat', sans-serif">Montserrat 國際美學字體</option>
+                        <option value="'Roboto Mono', monospace">Roboto Mono 工程科技字樣</option>
+                    </select>
+                </div>
+
+                <!-- Font Size Adjustments -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 gap-2.5 bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+                    <div>
+                        <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                            <span>姓名大小</span>
+                            <span id="name-size-val" class="text-blue-400 font-mono">24px</span>
+                        </div>
+                        <input type="range" id="name-size" min="16" max="42" value="24" oninput="updateTypography()" class="w-full accent-blue-500 bg-slate-800 rounded">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                            <span>行動電話</span>
+                            <span id="mobile-size-val" class="text-blue-400 font-mono">12px</span>
+                        </div>
+                        <input type="range" id="mobile-size" min="8" max="24" value="12" oninput="updateTypography()" class="w-full accent-blue-500 bg-slate-800 rounded">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                            <span>公司名稱</span>
+                            <span id="company-size-val" class="text-blue-400 font-mono">15px</span>
+                        </div>
+                        <input type="range" id="company-size" min="11" max="22" value="15" oninput="updateTypography()" class="w-full accent-blue-500 bg-slate-800 rounded">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                            <span>地址與網址</span>
+                            <span id="address-size-val" class="text-blue-400 font-mono">11px</span>
+                        </div>
+                        <input type="range" id="address-size" min="7" max="16" value="11" oninput="updateTypography()" class="w-full accent-blue-500 bg-slate-800 rounded">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                            <span>電話與傳真</span>
+                            <span id="phone-size-val" class="text-blue-400 font-mono">10px</span>
+                        </div>
+                        <input type="range" id="phone-size" min="7" max="16" value="10" oninput="updateTypography()" class="w-full accent-blue-500 bg-slate-800 rounded">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                            <span>統編與信箱</span>
+                            <span id="email-size-val" class="text-blue-400 font-mono">10px</span>
+                        </div>
+                        <input type="range" id="email-size" min="7" max="16" value="10" oninput="updateTypography()" class="w-full accent-blue-500 bg-slate-800 rounded">
+                    </div>
+                </div>
+
+                <!-- Text & Banner Color Pickers -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">姓名顏色</label>
+                        <input type="color" id="name-color" value="#1e3a8a" onchange="updateTypography()" class="w-full h-8 bg-slate-800 border border-slate-700 rounded cursor-pointer p-0.5">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">橫條底色</label>
+                        <input type="color" id="banner-bg-color" value="#1e3a8a" onchange="updateTypography()" class="w-full h-8 bg-slate-800 border border-slate-700 rounded cursor-pointer p-0.5">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] text-slate-400 mb-1">細節文字顏色</label>
+                        <input type="color" id="details-color" value="#334155" onchange="updateTypography()" class="w-full h-8 bg-slate-800 border border-slate-700 rounded cursor-pointer p-0.5">
+                    </div>
+                </div>
+
+                <!-- Free Position Movement for Name & Mobile -->
+                <div class="bg-slate-950/80 p-3 rounded-xl border border-slate-800 space-y-2.5">
+                    <div class="flex items-center justify-between">
+                        <label class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                            <i data-lucide="move" class="w-3.5 h-3.5 text-blue-400"></i> 姓名與電話位置與整體等比縮放
+                        </label>
+                        <button onclick="resetNameMobilePosition()" class="px-2 py-0.5 text-[11px] bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition flex items-center gap-1">
+                            <i data-lucide="rotate-ccw" class="w-3 h-3"></i> 重置位置
+                        </button>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-2.5">
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                                <span>水平偏移 (X)</span>
+                                <span id="pos-x-val" class="text-blue-400 font-mono">0px</span>
+                            </div>
+                            <input type="range" id="pos-x-range" min="-400" max="100" value="0" oninput="handlePosSliderChange()" class="w-full accent-blue-500 bg-slate-800 rounded">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                                <span>垂直偏移 (Y)</span>
+                                <span id="pos-y-val" class="text-blue-400 font-mono">0px</span>
+                            </div>
+                            <input type="range" id="pos-y-range" min="-100" max="220" value="0" oninput="handlePosSliderChange()" class="w-full accent-blue-500 bg-slate-800 rounded">
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-blue-400/90 leading-tight">✨ 畫布操作：按住姓名區塊可自由移動；按住姓名區塊左下角控制點拖拉即可同步等比例縮放字級！</p>
+                </div>
+            </div>
+
+            <!-- Text Content Input Controls -->
+            <div class="pt-3.5 border-t border-slate-800 space-y-2.5">
+                <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                    <i data-lucide="edit-3" class="w-4 h-4 text-blue-400"></i> 4. 名片文字內容 (可直接點擊右側名片修改)
+                </h3>
+                
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">姓名 Name</label>
+                        <input type="text" id="input-name" value="陳 智 恩" oninput="syncInputsToCard()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">行動電話 Mobile</label>
+                        <input type="text" id="input-mobile" value="0925-773687" oninput="syncInputsToCard()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">公司中文名稱 Company (ZH)</label>
+                    <input type="text" id="input-company-zh" value="銓祥科技股份有限公司" oninput="syncInputsToCard()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">公司英文名稱 Company (EN)</label>
+                    <input type="text" id="input-company-en" value="VISION APPLICATION TECH CORP." oninput="syncInputsToCard()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">公司地址 Address</label>
+                    <input type="text" id="input-address" value="407021 台中市西屯區工業區三十三路1號5樓之5" oninput="syncInputsToCard()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                </div>
+
+                <div>
+                    <label class="block text-xs text-slate-400 mb-1">公司網址 Website URL</label>
+                    <input type="text" id="input-website" value="https://vatech-singapore-website.onrender.com/" oninput="syncInputsToCard(); updateQRCode();" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-blue-400 font-mono focus:outline-none focus:ring-1 focus:ring-blue-500">
+                </div>
+
+                <!-- QR Code Display & Size Controls -->
+                <div class="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 space-y-2">
+                    <div class="flex items-center justify-between text-xs text-slate-300">
+                        <span class="font-semibold flex items-center gap-1.5 text-blue-400">
+                            <i data-lucide="qr-code" class="w-3.5 h-3.5"></i> 右側網址 QR Code 設定
+                        </span>
+                        <label class="inline-flex items-center cursor-pointer">
+                            <input type="checkbox" id="show-qrcode-toggle" checked onchange="toggleQRCode(this.checked)" class="sr-only peer">
+                            <div class="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600 relative"></div>
+                        </label>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>QR Code 尺寸:</span>
+                        <div class="flex items-center gap-2">
+                            <input type="range" id="qrcode-size-range" min="40" max="80" value="60" oninput="changeQRCodeSize(this.value)" class="w-24 accent-blue-500 bg-slate-800 rounded">
+                            <span id="qrcode-size-val" class="font-mono text-blue-400 text-[10px]">60px</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">電話 Tel</label>
+                        <input type="text" id="input-phone" value="04-2359-6698" oninput="syncInputsToCard()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">傳真 Fax</label>
+                        <input type="text" id="input-fax" value="04-2359-0156" oninput="syncInputsToCard()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">統一編號 Tax ID</label>
+                        <input type="text" id="input-taxid" value="54742901" oninput="syncInputsToCard()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-1">電子郵件 Email</label>
+                        <input type="text" id="input-email" value="leo.vattw@gmail.com" oninput="syncInputsToCard()" class="w-full bg-slate-800 border border-slate-700 rounded-lg p-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-blue-500">
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Column: Interactive Card Preview Stage -->
+        <div class="lg:col-span-7 flex flex-col items-center justify-start space-y-5">
+            
+            <div class="w-full bg-slate-900 border border-slate-800 rounded-2xl p-4 flex justify-between items-center shadow-lg">
+                <div class="flex items-center gap-2 text-xs text-slate-300 font-medium">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-blue-400"></i> 名片即時畫布預覽 (國際標準 90 × 54 mm 實體比例)
+                </div>
+                <div class="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-1 rounded-full font-mono">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> 90x54mm 向量可印
+                </div>
+            </div>
+
+            <!-- Preview Business Card Canvas Container -->
+            <div class="w-full bg-slate-950/90 border border-slate-800/80 rounded-2xl p-6 flex items-center justify-center min-h-[420px] shadow-2xl relative overflow-hidden">
+                
+                <div id="print-card-wrapper" class="card-stage p-5 flex flex-col justify-between transition-all duration-300 select-none bg-white">
+                    
+                    <!-- Top Row: Logo & Primary Person Name Block -->
+                    <div id="card-top-row" class="flex justify-between items-start w-full relative z-10 transition-all duration-300 h-20">
+                        
+                        <!-- Vectorized VA-TECH Image Logo with free positioning and drag-to-resize corner handle -->
+                        <div id="logo-container" class="draggable-block transition-transform duration-75 origin-top-left flex items-center max-w-[65%] logo-img-wrapper group rounded p-1 border border-transparent">
+                            <!-- Drag handle icon hint -->
+                            <div title="按住平移 Logo 位置" class="drag-handle absolute -top-3 -left-3 bg-blue-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-move shadow-md z-20">
+                                <i data-lucide="move" class="w-3 h-3"></i>
+                            </div>
+
+                            <!-- Logo image -->
+                            <img id="logo-img" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60' width='200' height='60'><text x='5' y='45' font-family='Montserrat, sans-serif' font-weight='800' font-size='40' fill='%231e3a8a' letter-spacing='2'>Logo</text></svg>" alt="Logo" class="h-12 w-auto object-contain pointer-events-none">
+
+                            <!-- Corner Resize Handle (Keeping aspect ratio) -->
+                            <div id="logo-resize-handle" title="拖拉此角落可等比例縮放 Logo (保持長寬比)" class="resize-handle absolute -bottom-2 -right-2 w-4 h-4 bg-blue-600 rounded-full border-2 border-white shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-30 flex items-center justify-center text-white">
+                                <div class="w-1.5 h-1.5 bg-white rounded-full"></div>
+                            </div>
+                        </div>
+
+                        <!-- Name & Mobile Number block with free draggable & corner resize capability -->
+                        <div id="name-mobile-block" class="draggable-block text-right relative transition-transform duration-75 origin-top-right group rounded p-1 border border-transparent">
+                            <!-- Drag handle icon hint -->
+                            <div title="按住平移姓名區塊位置" class="drag-handle absolute -top-3 -right-3 bg-blue-600 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-move shadow-md z-20">
+                                <i data-lucide="move" class="w-3 h-3"></i>
+                            </div>
+
+                            <div id="card-name" contenteditable="true" oninput="syncCardToInputs()" class="font-bold text-2xl tracking-widest text-blue-900 transition-colors">
+                                陳 智 恩
+                            </div>
+                            <div id="card-mobile" contenteditable="true" oninput="syncCardToInputs()" class="text-xs font-semibold text-slate-600 mt-1 tracking-wider font-mono">
+                                0925-773687
+                            </div>
+
+                            <!-- Corner Resize Handle for Name & Mobile Block -->
+                            <div id="name-resize-handle" title="拖拉此角落可同步縮放姓名與電話字級大小" class="resize-handle absolute -bottom-2 -left-2 w-4 h-4 bg-blue-600 rounded-full border-2 border-white shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-30 flex items-center justify-center text-white">
+                                <div class="w-1.5 h-1.5 bg-white rounded-full"></div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Middle Banner Bar with Company Name -->
+                    <div id="card-banner" class="my-auto py-2 px-3 -mx-5 bg-blue-900 text-white transition-colors duration-300 relative z-10">
+                        <div id="card-company-zh" contenteditable="true" oninput="syncCardToInputs()" class="font-bold text-sm tracking-wider">
+                            銓祥科技股份有限公司
+                        </div>
+                        <div id="card-company-en" contenteditable="true" oninput="syncCardToInputs()" class="text-[10px] font-semibold tracking-widest opacity-90 font-mono mt-0.5 uppercase">
+                            VISION APPLICATION TECH CORP.
+                        </div>
+                    </div>
+
+                    <!-- Bottom Details Section -->
+                    <div id="card-bottom-details" class="flex items-end justify-between gap-3 text-[11px] text-slate-700 font-medium transition-colors relative z-10">
+                        
+                        <!-- Left Details Content Block -->
+                        <div class="space-y-1 flex-1 min-w-0">
+                            <!-- Company Address -->
+                            <div class="flex items-center gap-1.5 leading-snug">
+                                <span id="card-address" contenteditable="true" oninput="syncCardToInputs()" class="tracking-tight inline-block py-0.5">
+                                    407021 台中市西屯區工業區三十三路1號5樓之5
+                                </span>
+                            </div>
+
+                            <!-- Company Website URL right under Address -->
+                            <div class="flex items-center gap-1 text-blue-700 font-mono font-semibold overflow-visible my-0.5">
+                                <i data-lucide="globe" class="w-3.5 h-3.5 inline-block shrink-0"></i>
+                                <span id="card-website" contenteditable="true" oninput="syncCardToInputs(); updateQRCode();" class="underline hover:text-blue-900 break-all inline-block py-0.5 leading-normal">
+                                    https://vatech-singapore-website.onrender.com/
+                                </span>
+                            </div>
+
+                            <!-- Tel/Fax & Tax ID/Email Grid -->
+                            <div id="card-contact-grid" class="grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono text-[10.5px] leading-snug">
+                                <div id="card-phone-wrapper" class="py-0.5">
+                                    <span id="card-lbl-phone">電話：</span><span id="card-phone" contenteditable="true" oninput="syncCardToInputs()">04-2359-6698</span>
+                                </div>
+                                <div id="card-fax-wrapper" class="py-0.5">
+                                    <span id="card-lbl-fax">傳真：</span><span id="card-fax" contenteditable="true" oninput="syncCardToInputs()">04-2359-0156</span>
+                                </div>
+                                <div id="card-taxid-wrapper" class="py-0.5">
+                                    <span id="card-lbl-taxid">統一編號：</span><span id="card-taxid" contenteditable="true" oninput="syncCardToInputs()">54742901</span>
+                                </div>
+                                <div id="card-email-wrapper" class="py-0.5">
+                                    <span id="card-lbl-email">E-mail：</span><span id="card-email" contenteditable="true" oninput="syncCardToInputs()">leo.vattw@gmail.com</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic QR Code Container on the Right Side -->
+                        <div id="qrcode-wrapper" class="flex flex-col items-center justify-center shrink-0 bg-white p-1 rounded-lg border border-slate-200/80 shadow-xs transition-all">
+                            <div id="qrcode" class="flex items-center justify-center"></div>
+                            <span id="qrcode-caption" class="text-[7.5px] text-slate-500 font-mono tracking-tighter mt-0.5 leading-none uppercase">SCAN ME</span>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <script>
+        // State variables
+        let logoPosX = 0;
+        let logoPosY = 0;
+        let namePosX = 0;
+        let namePosY = 0;
+        let currentLogoScale = 100;
+        let activeTheme = 'modern-blue';
+        let currentQRSize = 60;
+        let qrCodeInstance = null;
+
+        const defaultLogoSVG = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 60' width='200' height='60'><text x='5' y='45' font-family='Montserrat, sans-serif' font-weight='800' font-size='40' fill='%231e3a8a' letter-spacing='2'>Logo</text></svg>";
+
+        // Multilingual Dictionary Data
+        const i18nData = {
+            zh: {
+                lblPhone: "電話：",
+                lblFax: "傳真：",
+                lblTaxid: "統一編號：",
+                lblEmail: "E-mail：",
+                name: "陳 智 恩",
+                mobile: "0925-773687",
+                companyZh: "銓祥科技股份有限公司",
+                companyEn: "VISION APPLICATION TECH CORP.",
+                address: "407021 台中市西屯區工業區三十三路1號5樓之5",
+                website: "https://vatech-singapore-website.onrender.com/",
+                phone: "04-2359-6698",
+                fax: "04-2359-0156",
+                taxid: "54742901",
+                email: "leo.vattw@gmail.com",
+                font: "'Noto Sans TC', sans-serif"
+            },
+            en: {
+                lblPhone: "Tel: ",
+                lblFax: "Fax: ",
+                lblTaxid: "Tax ID: ",
+                lblEmail: "E-mail: ",
+                name: "Eric Chen",
+                mobile: "+886 925-773687",
+                companyZh: "Vision Application Tech Corp.",
+                companyEn: "VISION APPLICATION TECH CORP.",
+                address: "5F.-5, No. 1, 33rd Rd., Taichung Industrial Park, Xitun Dist., Taichung City 407021, Taiwan",
+                website: "https://vatech-singapore-website.onrender.com/",
+                phone: "+886-4-2359-6698",
+                fax: "+886-4-2359-0156",
+                taxid: "54742901",
+                email: "leo.vattw@gmail.com",
+                font: "'Montserrat', sans-serif"
+            },
+            ja: {
+                lblPhone: "電話：",
+                lblFax: "FAX：",
+                lblTaxid: "統一番號：",
+                lblEmail: "E-mail：",
+                name: "陳 智恩",
+                mobile: "0925-773687",
+                companyZh: "銓祥科技股份有限公司",
+                companyEn: "VISION APPLICATION TECH CORP.",
+                address: "407021 台湾台中市西屯区工業区三十三路1号5階-5",
+                website: "https://vatech-singapore-website.onrender.com/",
+                phone: "+886-4-2359-6698",
+                fax: "+886-4-2359-0156",
+                taxid: "54742901",
+                email: "leo.vattw@gmail.com",
+                font: "'Noto Sans JP', sans-serif"
+            }
+        };
+
+        // --- Logo Transform & Scaling Logic ---
+        function applyLogoTransform() {
+            const container = document.getElementById('logo-container');
+            if (container) {
+                container.style.transform = `translate(${logoPosX}px, ${logoPosY}px) scale(${currentLogoScale / 100})`;
+            }
+            document.getElementById('logo-pos-x-range').value = logoPosX;
+            document.getElementById('logo-pos-y-range').value = logoPosY;
+            document.getElementById('logo-scale').value = currentLogoScale;
+            document.getElementById('logo-pos-x-val').innerText = `${logoPosX}px`;
+            document.getElementById('logo-pos-y-val').innerText = `${logoPosY}px`;
+            document.getElementById('logo-scale-val').innerText = `${currentLogoScale}%`;
+        }
+
+        function handleLogoPosSliderChange() {
+            logoPosX = parseInt(document.getElementById('logo-pos-x-range').value, 10);
+            logoPosY = parseInt(document.getElementById('logo-pos-y-range').value, 10);
+            applyLogoTransform();
+        }
+
+        function resetLogoPosition() {
+            logoPosX = 0;
+            logoPosY = 0;
+            currentLogoScale = 100;
+            applyLogoTransform();
+        }
+
+        function updateLogoStyle() {
+            currentLogoScale = parseInt(document.getElementById('logo-scale').value, 10);
+            applyLogoTransform();
+        }
+
+        function resetDefaultLogo() {
+            document.getElementById('logo-img').src = defaultLogoSVG;
+            document.getElementById('logo-img').style.display = 'block';
+            resetLogoPosition();
+        }
+
+        function clearLogoImage() {
+            document.getElementById('logo-img').src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='1' height='1'/>";
+        }
+
+        // --- Name & Mobile Position Logic ---
+        function applyNameMobileTransform() {
+            const block = document.getElementById('name-mobile-block');
+            if (block) {
+                block.style.transform = `translate(${namePosX}px, ${namePosY}px)`;
+            }
+            document.getElementById('pos-x-range').value = namePosX;
+            document.getElementById('pos-y-range').value = namePosY;
+            document.getElementById('pos-x-val').innerText = `${namePosX}px`;
+            document.getElementById('pos-y-val').innerText = `${namePosY}px`;
+        }
+
+        function handlePosSliderChange() {
+            namePosX = parseInt(document.getElementById('pos-x-range').value, 10);
+            namePosY = parseInt(document.getElementById('pos-y-range').value, 10);
+            applyNameMobileTransform();
+        }
+
+        function resetNameMobilePosition() {
+            namePosX = 0;
+            namePosY = 0;
+            applyNameMobileTransform();
+        }
+
+        // --- Background & Magic Wand Removal Handling ---
+        function removeLogoBackground() {
+            const img = document.getElementById('logo-img');
+            if (!img.src || img.src.includes('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>')) return;
+
+            const tempImg = new Image();
+            tempImg.crossOrigin = "Anonymous";
+            tempImg.onload = function() {
+                const canvas = document.createElement('canvas');
+                canvas.width = tempImg.width;
+                canvas.height = tempImg.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(tempImg, 0, 0);
+
+                const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const data = imgData.data;
+
+                for (let i = 0; i < data.length; i += 4) {
+                    const r = data[i];
+                    const g = data[i + 1];
+                    const b = data[i + 2];
+
+                    const isWhite = (r > 225 && g > 225 && b > 225);
+                    const isGrayChecker = (Math.abs(r - g) < 12 && Math.abs(g - b) < 12 && r > 170 && r < 240);
+
+                    if (isWhite || isGrayChecker) {
+                        data[i + 3] = 0;
+                    }
+                }
+
+                ctx.putImageData(imgData, 0, 0);
+                img.src = canvas.toDataURL('image/png');
+            };
+            tempImg.src = img.src;
+        }
+
+        function handleLogoUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    document.getElementById('logo-img').src = e.target.result;
+                    document.getElementById('logo-img').style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function handleBgUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const card = document.getElementById('print-card-wrapper');
+                    card.style.backgroundImage = `url('${e.target.result}')`;
+                    card.style.backgroundSize = 'cover';
+                    card.style.backgroundPosition = 'center';
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function handleBgColorChange(color) {
+            const card = document.getElementById('print-card-wrapper');
+            card.style.backgroundImage = 'none';
+            card.style.backgroundColor = color;
+            document.getElementById('bg-color-picker').value = color;
+        }
+
+        function removeBgImage() {
+            const card = document.getElementById('print-card-wrapper');
+            card.style.backgroundImage = 'none';
+            card.style.backgroundColor = '#ffffff';
+            document.getElementById('bg-color-picker').value = '#ffffff';
+            const bgInput = document.getElementById('bg-file-input');
+            if (bgInput) bgInput.value = '';
+        }
+
+        // --- Theme Logic ---
+        function applyTheme(themeName) {
+            activeTheme = themeName;
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                btn.classList.remove('border-blue-500');
+                btn.classList.add('border-transparent');
+            });
+            const activeBtn = document.getElementById(`theme-btn-${themeName}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('border-transparent');
+                activeBtn.classList.add('border-blue-500');
+            }
+
+            const card = document.getElementById('print-card-wrapper');
+            removeBgImage();
+
+            switch(themeName) {
+                case 'modern-blue':
+                    card.style.backgroundColor = '#ffffff';
+                    document.getElementById('name-color').value = '#1e3a8a';
+                    document.getElementById('banner-bg-color').value = '#1e3a8a';
+                    document.getElementById('details-color').value = '#334155';
+                    break;
+                case 'classic-original':
+                    card.style.backgroundColor = '#f8fafc';
+                    document.getElementById('name-color').value = '#0f172a';
+                    document.getElementById('banner-bg-color').value = '#1e293b';
+                    document.getElementById('details-color').value = '#475569';
+                    break;
+                case 'white-gold':
+                    card.style.backgroundColor = '#fdfbf7';
+                    document.getElementById('name-color').value = '#78350f';
+                    document.getElementById('banner-bg-color').value = '#92400e';
+                    document.getElementById('details-color').value = '#78350f';
+                    break;
+                case 'dark-tech':
+                    card.style.backgroundColor = '#0f172a';
+                    document.getElementById('name-color').value = '#60a5fa';
+                    document.getElementById('banner-bg-color').value = '#1e3a8a';
+                    document.getElementById('details-color').value = '#94a3b8';
+                    break;
+            }
+            updateTypography();
+        }
+
+        // --- Typography Logic ---
+        function updateTypography() {
+            const font = document.getElementById('font-family').value;
+            const nameSize = document.getElementById('name-size').value + 'px';
+            const mobileSize = document.getElementById('mobile-size').value + 'px';
+            const companySize = document.getElementById('company-size').value + 'px';
+            const addressSize = document.getElementById('address-size').value + 'px';
+            const phoneSize = document.getElementById('phone-size').value + 'px';
+            const emailSize = document.getElementById('email-size').value + 'px';
+
+            const nameColor = document.getElementById('name-color').value;
+            const bannerBgColor = document.getElementById('banner-bg-color').value;
+            const detailsColor = document.getElementById('details-color').value;
+
+            document.getElementById('name-size-val').innerText = nameSize;
+            document.getElementById('mobile-size-val').innerText = mobileSize;
+            document.getElementById('company-size-val').innerText = companySize;
+            document.getElementById('address-size-val').innerText = addressSize;
+            document.getElementById('phone-size-val').innerText = phoneSize;
+            document.getElementById('email-size-val').innerText = emailSize;
+
+            const card = document.getElementById('print-card-wrapper');
+            card.style.fontFamily = font;
+
+            document.getElementById('card-name').style.fontSize = nameSize;
+            document.getElementById('card-name').style.color = nameColor;
+
+            document.getElementById('card-mobile').style.fontSize = mobileSize;
+            document.getElementById('card-banner').style.backgroundColor = bannerBgColor;
+
+            document.getElementById('card-company-zh').style.fontSize = companySize;
+            document.getElementById('card-address').style.fontSize = addressSize;
+            document.getElementById('card-website').style.fontSize = addressSize;
+
+            document.getElementById('card-phone').style.fontSize = phoneSize;
+            document.getElementById('card-fax').style.fontSize = phoneSize;
+            document.getElementById('card-taxid').style.fontSize = emailSize;
+            document.getElementById('card-email').style.fontSize = emailSize;
+
+            document.getElementById('card-bottom-details').style.color = detailsColor;
+        }
+
+        // --- Sync Inputs <-> Card ---
+        function syncInputsToCard() {
+            document.getElementById('card-name').innerText = document.getElementById('input-name').value;
+            document.getElementById('card-mobile').innerText = document.getElementById('input-mobile').value;
+            document.getElementById('card-company-zh').innerText = document.getElementById('input-company-zh').value;
+            document.getElementById('card-company-en').innerText = document.getElementById('input-company-en').value;
+            document.getElementById('card-address').innerText = document.getElementById('input-address').value;
+            document.getElementById('card-website').innerText = document.getElementById('input-website').value;
+            document.getElementById('card-phone').innerText = document.getElementById('input-phone').value;
+            document.getElementById('card-fax').innerText = document.getElementById('input-fax').value;
+            document.getElementById('card-taxid').innerText = document.getElementById('input-taxid').value;
+            document.getElementById('card-email').innerText = document.getElementById('input-email').value;
+        }
+
+        function syncCardToInputs() {
+            document.getElementById('input-name').value = document.getElementById('card-name').innerText;
+            document.getElementById('input-mobile').value = document.getElementById('card-mobile').innerText;
+            document.getElementById('input-company-zh').value = document.getElementById('card-company-zh').innerText;
+            document.getElementById('input-company-en').value = document.getElementById('card-company-en').innerText;
+            document.getElementById('input-address').value = document.getElementById('card-address').innerText;
+            document.getElementById('input-website').value = document.getElementById('card-website').innerText;
+            document.getElementById('input-phone').value = document.getElementById('card-phone').innerText;
+            document.getElementById('input-fax').value = document.getElementById('card-fax').innerText;
+            document.getElementById('input-taxid').value = document.getElementById('card-taxid').innerText;
+            document.getElementById('input-email').value = document.getElementById('card-email').innerText;
+        }
+
+        // --- QR Code Logic ---
+        function updateQRCode() {
+            const url = document.getElementById('card-website').innerText.trim() || "https://vatech-singapore-website.onrender.com/";
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = "";
+            
+            try {
+                qrCodeInstance = new QRCode(qrContainer, {
+                    text: url,
+                    width: currentQRSize,
+                    height: currentQRSize,
+                    colorDark : "#0f172a",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.M
+                });
+            } catch (err) {
+                console.error("QRCode Generation Error:", err);
+            }
+        }
+
+        function toggleQRCode(show) {
+            const wrapper = document.getElementById('qrcode-wrapper');
+            if (wrapper) {
+                wrapper.style.display = show ? 'flex' : 'none';
+            }
+        }
+
+        function changeQRCodeSize(val) {
+            currentQRSize = parseInt(val, 10);
+            document.getElementById('qrcode-size-val').innerText = `${currentQRSize}px`;
+            updateQRCode();
+        }
+
+        // --- Language Switcher ---
+        function switchLanguage(lang) {
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white');
+                btn.classList.add('text-slate-300');
+            });
+            const activeLangBtn = document.getElementById(`lang-btn-${lang}`);
+            if (activeLangBtn) {
+                activeLangBtn.classList.add('bg-blue-600', 'text-white');
+                activeLangBtn.classList.remove('text-slate-300');
+            }
+
+            const data = i18nData[lang];
+            if (!data) return;
+
+            document.getElementById('card-lbl-phone').innerText = data.lblPhone;
+            document.getElementById('card-lbl-fax').innerText = data.lblFax;
+            document.getElementById('card-lbl-taxid').innerText = data.lblTaxid;
+            document.getElementById('card-lbl-email').innerText = data.lblEmail;
+
+            document.getElementById('input-name').value = data.name;
+            document.getElementById('input-mobile').value = data.mobile;
+            document.getElementById('input-company-zh').value = data.companyZh;
+            document.getElementById('input-company-en').value = data.companyEn;
+            document.getElementById('input-address').value = data.address;
+            document.getElementById('input-website').value = data.website;
+            document.getElementById('input-phone').value = data.phone;
+            document.getElementById('input-fax').value = data.fax;
+            document.getElementById('input-taxid').value = data.taxid;
+            document.getElementById('input-email').value = data.email;
+
+            document.getElementById('font-family').value = data.font;
+
+            syncInputsToCard();
+            updateTypography();
+            updateQRCode();
+        }
+
+        // --- Export PNG ---
+        function exportPNG() {
+            const cardWrapper = document.getElementById('print-card-wrapper');
+            
+            const editables = cardWrapper.querySelectorAll('[contenteditable="true"]');
+            editables.forEach(el => el.setAttribute('contenteditable', 'false'));
+
+            html2canvas(cardWrapper, {
+                scale: 4,
+                useCORS: true,
+                backgroundColor: null,
+                logging: false
+            }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `VA-TECH_Business_Card_${Date.now()}.png`;
+                link.href = canvas.toDataURL('image/png', 1.0);
+                link.click();
+
+                editables.forEach(el => el.setAttribute('contenteditable', 'true'));
+            }).catch(err => {
+                console.error("Export PNG Error:", err);
+                editables.forEach(el => el.setAttribute('contenteditable', 'true'));
+            });
+        }
+
+        // --- Interactive Canvas Drag-to-Move & Drag-to-Resize Pointer Handlers ---
+        function setupInteractiveBlock(config) {
+            const { elementId, resizeHandleId, getPos, setPos, getScale, setScale } = config;
+            const el = document.getElementById(elementId);
+            const resizeHandle = document.getElementById(resizeHandleId);
+            if (!el) return;
+
+            let isDragging = false;
+            let isResizing = false;
+            let startX = 0, startY = 0;
+            let initialScale = 100;
+
+            // --- 1. Drag-to-Move Handler ---
+            el.addEventListener('pointerdown', (e) => {
+                if (e.target.getAttribute('contenteditable') === 'true' || e.target.classList.contains('resize-handle')) return;
+
+                isDragging = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                el.classList.add('active-block');
+                el.setPointerCapture(e.pointerId);
+                e.stopPropagation();
+            });
+
+            el.addEventListener('pointermove', (e) => {
+                if (!isDragging) return;
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                startX = e.clientX;
+                startY = e.clientY;
+
+                const pos = getPos();
+                setPos(pos.x + dx, pos.y + dy);
+            });
+
+            const stopDrag = (e) => {
+                if (isDragging) {
+                    isDragging = false;
+                    el.classList.remove('active-block');
+                    try { el.releasePointerCapture(e.pointerId); } catch(err){}
+                }
+            };
+
+            el.addEventListener('pointerup', stopDrag);
+            el.addEventListener('pointercancel', stopDrag);
+
+            // --- 2. Corner Resize-to-Scale Handler (Preserving Aspect Ratio) ---
+            if (resizeHandle) {
+                resizeHandle.addEventListener('pointerdown', (e) => {
+                    isResizing = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    if (getScale) initialScale = getScale();
+                    resizeHandle.setPointerCapture(e.pointerId);
+                    e.stopPropagation();
+                    e.preventDefault();
+                });
+
+                resizeHandle.addEventListener('pointermove', (e) => {
+                    if (!isResizing) return;
+                    const dx = e.clientX - startX;
+                    const dy = e.clientY - startY;
+                    
+                    // Aspect ratio locked scale calculation based on vector displacement
+                    const delta = (dx + dy) / 2;
+                    if (setScale) {
+                        const newScale = Math.min(Math.max(initialScale + delta * 0.8, 30), 280);
+                        setScale(newScale);
+                    }
+                });
+
+                const stopResize = (e) => {
+                    if (isResizing) {
+                        isResizing = false;
+                        try { resizeHandle.releasePointerCapture(e.pointerId); } catch(err){}
+                    }
+                };
+
+                resizeHandle.addEventListener('pointerup', stopResize);
+                resizeHandle.addEventListener('pointercancel', stopResize);
+            }
+        }
+
+        // --- Window Initialization ---
+        window.onload = function() {
+            lucide.createIcons();
+            applyLogoTransform();
+            applyNameMobileTransform();
+            updateTypography();
+            updateQRCode();
+
+            // Setup Draggable & Resizable Logo Block
+            setupInteractiveBlock({
+                elementId: 'logo-container',
+                resizeHandleId: 'logo-resize-handle',
+                getPos: () => ({ x: logoPosX, y: logoPosY }),
+                setPos: (x, y) => {
+                    logoPosX = Math.min(Math.max(Math.round(x), -250), 400);
+                    logoPosY = Math.min(Math.max(Math.round(y), -100), 220);
+                    applyLogoTransform();
+                },
+                getScale: () => currentLogoScale,
+                setScale: (scale) => {
+                    currentLogoScale = Math.round(scale);
+                    applyLogoTransform();
+                }
+            });
+
+            // Setup Draggable & Resizable Name/Mobile Block
+            setupInteractiveBlock({
+                elementId: 'name-mobile-block',
+                resizeHandleId: 'name-resize-handle',
+                getPos: () => ({ x: namePosX, y: namePosY }),
+                setPos: (x, y) => {
+                    namePosX = Math.min(Math.max(Math.round(x), -400), 100);
+                    namePosY = Math.min(Math.max(Math.round(y), -100), 220);
+                    applyNameMobileTransform();
+                },
+                getScale: () => {
+                    return parseInt(document.getElementById('name-size').value, 10);
+                },
+                setScale: (newSize) => {
+                    const currentNameSize = parseInt(document.getElementById('name-size').value, 10);
+                    const currentMobileSize = parseInt(document.getElementById('mobile-size').value, 10);
+                    const ratio = currentMobileSize / currentNameSize;
+
+                    const updatedNameSize = Math.min(Math.max(Math.round(newSize), 16), 42);
+                    const updatedMobileSize = Math.min(Math.max(Math.round(updatedNameSize * ratio), 8), 24);
+
+                    document.getElementById('name-size').value = updatedNameSize;
+                    document.getElementById('mobile-size').value = updatedMobileSize;
+                    updateTypography();
+                }
+            });
+        };
+    </script>
+</body>
+</html>
